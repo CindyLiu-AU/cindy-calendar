@@ -516,18 +516,19 @@
     render();
   }
 
-  // ── Countdown badge ──
+  // ── Countdown badge (always shown — uses deadline if set, else task date) ──
+  function refDate(t)  { return t.deadline || t.date; }
+  function daysLeft(t) { return Math.ceil((new Date(refDate(t)+'T00:00:00') - new Date(todayStr()+'T00:00:00')) / 86400000); }
+
   function cdBadge(t, cls_prefix = 'countdown-badge') {
-    if (!t.deadline) return '';
-    const dl   = new Date(t.deadline + 'T00:00:00');
-    const now  = new Date(todayStr() + 'T00:00:00');
-    const days = Math.ceil((dl - now) / 86400000);
-    if (t.done)    return `<div class="${cls_prefix} good">✓ Done</div>`;
-    if (days < 0)  return `<div class="${cls_prefix} urgent">⚠ Overdue ${Math.abs(days)}d</div>`;
-    if (days === 0) return `<div class="${cls_prefix} urgent">⚠ Due TODAY</div>`;
-    if (days <= 7)  return `<div class="${cls_prefix} urgent">🔴 ${days}d left</div>`;
-    if (days <= 14) return `<div class="${cls_prefix} warning">🟡 ${days}d left</div>`;
-    return `<div class="${cls_prefix} ok">🔵 ${days}d left</div>`;
+    if (t.done) return `<div class="${cls_prefix} good">✓ Done</div>`;
+    const d = daysLeft(t);
+    if (d < 0)  return `<div class="${cls_prefix} urgent">⚠ Overdue ${Math.abs(d)}d</div>`;
+    if (d === 0) return `<div class="${cls_prefix} urgent">⚠ Due TODAY</div>`;
+    if (d === 1) return `<div class="${cls_prefix} urgent">🔴 1 day left</div>`;
+    if (d <= 7)  return `<div class="${cls_prefix} urgent">🔴 ${d}d left</div>`;
+    if (d <= 14) return `<div class="${cls_prefix} warning">🟡 ${d}d left</div>`;
+    return `<div class="${cls_prefix} ok">🔵 ${d}d left</div>`;
   }
 
   // ── Task card for list view ──
@@ -582,48 +583,50 @@
       return;
     }
 
-    // Date range
-    const dates = [...new Set(visible.map(t => t.date))].sort();
-    const minDate = new Date(dates[0] + 'T00:00:00');
-    const maxDate = new Date(dates[dates.length - 1] + 'T00:00:00');
+    // Sort ASC by days left (fewest first = top of timeline)
+    visible.sort((a, b) => daysLeft(a) - daysLeft(b) || a.date.localeCompare(b.date));
+
+    // Date range — use reference date (deadline || date) for positioning
+    const refs    = visible.map(t => refDate(t)).sort();
+    const minDate = new Date(refs[0] + 'T00:00:00');
+    const maxDate = new Date(refs[refs.length - 1] + 'T00:00:00');
 
     function yOf(dateStr) {
       const d = new Date(dateStr + 'T00:00:00');
       return PAD_TOP + Math.round((d - minDate) / 86400000) * PDAY;
     }
 
-    // Group by date
-    const byDate = {};
-    visible.forEach(t => { (byDate[t.date] = byDate[t.date] || []).push(t); });
+    // Group by reference date
+    const byRef = {};
+    visible.forEach(t => { const r = refDate(t); (byRef[r] = byRef[r] || []).push(t); });
+    const refDates = Object.keys(byRef).sort();
 
     // Build HTML
     let dotsH = '';
     let bubbH = '';
-    let sideN = 0; // global counter for alternating sides
+    let sideN = 0;
 
-    for (const date of dates) {
-      const baseY     = yOf(date);
-      const { text, cls } = dayLabel(date);
-      const isToday   = date === today;
+    for (const rd of refDates) {
+      const baseY   = yOf(rd);
+      const { text, cls } = dayLabel(rd);
+      const isToday = rd === today;
 
-      // Date marker
       dotsH += `<div class="vt-dot${isToday ? ' is-today' : ''}" style="top:${baseY}px"></div>
                 <div class="vt-lbl ${cls}" style="top:${baseY - 20}px">${text}</div>`;
 
-      const dayTasks = byDate[date];
-      dayTasks.forEach((t, i) => {
-        const side = sideN % 2 === 0 ? 'right' : 'left';
+      byRef[rd].forEach((t, i) => {
+        const side    = sideN % 2 === 0 ? 'right' : 'left';
         sideN++;
-        // Stack tasks on same date with PDAY/2 gap
-        const taskY = baseY + i * Math.round(PDAY * 0.55);
-
+        const taskY   = baseY + i * Math.round(PDAY * 0.58);
         const col     = catColor(t);
         const catInfo = CATS[t.category] || CATS.other;
         const badge   = cdBadge(t, 'vt-badge');
-        const dueDate = fmtShort(t.date);
+        // Show the reference date (deadline if set, else task date)
+        const dispDate = fmtShort(refDate(t));
+        const hasDeadline = !!t.deadline;
 
         bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}"
-            data-id="${t.id}" data-date="${t.date}" data-base-top="${taskY}"
+            data-id="${t.id}" data-ref="${refDate(t)}" data-base-top="${taskY}"
             style="top:${taskY}px"
             onmousedown="startDrag(event,'${t.id}')"
             ontouchstart="startDrag(event,'${t.id}')">
@@ -631,7 +634,7 @@
           <div class="vt-body">
             <div class="vt-title">${escHtml(t.title)}</div>
             <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-              <span style="font-size:10px;font-weight:700;color:var(--muted)">${dueDate}</span>
+              <span style="font-size:10px;font-weight:700;color:var(--muted)">${hasDeadline ? '⏰ ' : ''}${dispDate}</span>
               <span style="background:${col}22;color:${col};border-radius:8px;padding:1px 6px;font-size:10px;font-weight:800">${catInfo.label}</span>
             </div>
             ${badge}
@@ -644,7 +647,7 @@
     // Container height
     const totalDays = Math.round((maxDate - minDate) / 86400000);
     const containerH = PAD_TOP + totalDays * PDAY + PAD_BOT +
-                       Math.max(...Object.values(byDate).map(arr => (arr.length - 1) * Math.round(PDAY * 0.55)), 0);
+      Math.max(...Object.values(byRef).map(arr => (arr.length - 1) * Math.round(PDAY * 0.58)), 0);
 
     wrap.style.height = containerH + 'px';
     wrap.innerHTML = `<div class="vt-line"></div>${dotsH}${bubbH}`;
@@ -659,42 +662,53 @@
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const el      = document.querySelector(`.vt-bubble[data-id="${taskId}"]`);
     if (!el) return;
-    const baseTop = parseFloat(el.dataset.baseTop);
+    const baseTop  = parseFloat(el.dataset.baseTop);
+    const origRef  = el.dataset.ref || task.date;  // reference date (deadline || date)
 
-    dragState = { taskId, origDate: task.date, startY: clientY, el, baseTop };
+    dragState = { taskId, origRef, startY: clientY, el, baseTop };
     el.classList.add('vt-dragging');
 
     const preview = document.getElementById('drag-preview');
     preview.style.display = 'block';
-    preview.textContent   = fmtFull(task.date);
+    preview.textContent   = fmtFull(origRef);
 
     function onMove(e) {
       if (!dragState) return;
       e.preventDefault();
-      const cy    = e.touches ? e.touches[0].clientY : e.clientY;
-      const dy    = cy - dragState.startY;
+      const cy  = e.touches ? e.touches[0].clientY : e.clientY;
+      const dy  = cy - dragState.startY;
       dragState.el.style.top = (dragState.baseTop + dy) + 'px';
 
-      const daysDelta   = Math.round(dy / PDAY);
-      let   previewDate = addDays(dragState.origDate, daysDelta);
-      if (previewDate < todayStr()) previewDate = todayStr();
-      preview.textContent = fmtFull(previewDate);
+      const delta = Math.round(dy / PDAY);
+      let   prev  = addDays(dragState.origRef, delta);
+      if (prev < todayStr()) prev = todayStr();
+      preview.textContent = fmtFull(prev);
     }
 
     async function onEnd(e) {
       if (!dragState) return;
-      const cy        = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
-      const dy        = cy - dragState.startY;
-      const daysDelta = Math.round(dy / PDAY);
-      let newDate     = addDays(dragState.origDate, daysDelta);
-      if (newDate < todayStr()) newDate = todayStr();
+      const cy    = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+      const dy    = cy - dragState.startY;
+      const delta = Math.round(dy / PDAY);
+      let newRef  = addDays(dragState.origRef, delta);
+      if (newRef < todayStr()) newRef = todayStr();
 
       preview.style.display = 'none';
       dragState.el.classList.remove('vt-dragging');
 
-      if (newDate !== dragState.origDate) {
+      if (newRef !== dragState.origRef) {
         const t = tasks.find(x => x.id === dragState.taskId);
-        if (t) { t.date = newDate; sortTasks(); await pushTasks(); }
+        if (t) {
+          if (t.deadline) {
+            // shift both deadline and task date by same delta
+            t.deadline = newRef;
+            t.date = addDays(t.date, delta);
+            if (t.date < todayStr()) t.date = todayStr();
+          } else {
+            t.date = newRef;
+          }
+          sortTasks(); await pushTasks();
+        }
       }
 
       dragState = null;

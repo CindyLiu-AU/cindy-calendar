@@ -622,7 +622,7 @@
     const d = daysLeft(t);
     if (d < 0)  return `<div class="${cls_prefix} urgent">⚠ Overdue ${Math.abs(d)}d</div>`;
     if (d === 0) return `<div class="${cls_prefix} urgent">⚠ Due TODAY</div>`;
-    if (d === 1) return `<div class="${cls_prefix} urgent">🔴 1 day left</div>`;
+    if (d === 1) return `<div class="${cls_prefix} urgent">🔴 Tomorrow</div>`;
     if (d <= 7)  return `<div class="${cls_prefix} urgent">🔴 ${d}d left</div>`;
     if (d <= 14) return `<div class="${cls_prefix} warning">🟡 ${d}d left</div>`;
     return `<div class="${cls_prefix} ok">🔵 ${d}d left</div>`;

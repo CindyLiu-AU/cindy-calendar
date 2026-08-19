@@ -338,6 +338,57 @@
     }
     .form-save-btn:active { opacity: .8; }
 
+    /* ── Long-press pulse ── */
+    @keyframes lp-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+    .vt-bubble.lp-active { animation: lp-pulse .18s ease; border-color: var(--amber) !important; }
+
+    /* ── Action sheet (long press menu) ── */
+    #act-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:400; }
+    #act-overlay.open { display:block; }
+    #act-sheet {
+      position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(101%);
+      width:100%; max-width:520px; background:var(--bg);
+      border-radius:22px 22px 0 0; border:1.5px solid var(--border); border-bottom:none;
+      z-index:500; padding:0 14px calc(env(safe-area-inset-bottom,0px)+16px);
+      transition:transform .28s cubic-bezier(.32,.72,0,1);
+    }
+    #act-sheet.open { transform:translateX(-50%) translateY(0); }
+    .act-title {
+      font-size:14px; font-weight:800; color:var(--muted);
+      padding:16px 0 10px; border-bottom:1px solid var(--border); margin-bottom:10px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .act-btn {
+      display:flex; align-items:center; gap:12px; width:100%; padding:14px 4px;
+      background:none; border:none; color:var(--text); font-size:16px; font-weight:700;
+      font-family:inherit; cursor:pointer; border-bottom:1px solid var(--border);
+    }
+    .act-btn:last-child { border-bottom:none; }
+    .act-btn:active { opacity:.7; }
+    .act-btn.danger { color:var(--red); }
+    .act-cancel { color:var(--muted) !important; font-weight:600 !important; }
+
+    /* ── Edit sheet ── */
+    #edit-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:400; }
+    #edit-overlay.open { display:block; }
+    #edit-sheet {
+      position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(101%);
+      width:100%; max-width:520px; background:var(--bg);
+      border-radius:22px 22px 0 0; border:1.5px solid var(--border); border-bottom:none;
+      z-index:500; max-height:85svh; display:flex; flex-direction:column;
+      transition:transform .28s cubic-bezier(.32,.72,0,1);
+      padding-bottom:calc(env(safe-area-inset-bottom,0px)+8px);
+    }
+    #edit-sheet.open { transform:translateX(-50%) translateY(0); }
+    #edit-body { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+    .edit-label { font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+    .edit-save-btn {
+      width:100%; padding:13px; border-radius:12px; border:none;
+      background:var(--amber); color:#1a1000; font-size:15px; font-weight:900;
+      font-family:inherit; cursor:pointer; margin-top:4px;
+    }
+    .edit-save-btn:active { opacity:.8; }
+
     /* ── FAB ── */
     #fab {
       position: fixed;
@@ -396,6 +447,49 @@
       <div class="cat-row" id="cat-picker"></div>
       <button class="form-save-btn" onclick="saveTask()">＋ Add</button>
     </div>
+  </div>
+</div>
+
+<!-- Action sheet (long press) -->
+<div id="act-overlay" onclick="closeActSheet()"></div>
+<div id="act-sheet">
+  <div class="sheet-handle"></div>
+  <div class="act-title" id="act-task-title"></div>
+  <button class="act-btn" onclick="editFromAct()">✏️ Edit</button>
+  <button class="act-btn danger" onclick="deleteFromAct()">🗑 Delete</button>
+  <button class="act-btn act-cancel" onclick="closeActSheet()">✕ Cancel</button>
+</div>
+
+<!-- Edit sheet -->
+<div id="edit-overlay" onclick="closeEditSheet()"></div>
+<div id="edit-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div class="sheet-head-date">Edit Reminder</div>
+    <button class="sheet-close" onclick="closeEditSheet()">✕</button>
+  </div>
+  <div id="edit-body">
+    <div>
+      <div class="edit-label">Title</div>
+      <input class="form-input" id="e-title" placeholder="Reminder title…" style="width:100%" />
+    </div>
+    <div>
+      <div class="edit-label">Date</div>
+      <input class="form-input" id="e-date" type="date" style="width:100%" />
+    </div>
+    <div>
+      <div class="edit-label">Time (optional)</div>
+      <input class="form-input" id="e-time" type="time" style="width:100%" />
+    </div>
+    <div>
+      <div class="edit-label">Deadline (optional)</div>
+      <input class="form-input" id="e-deadline" type="date" style="width:100%" />
+    </div>
+    <div>
+      <div class="edit-label">Category</div>
+      <div class="cat-row" id="edit-cat-row" style="flex-wrap:wrap"></div>
+    </div>
+    <button class="edit-save-btn" onclick="saveEdit()">✓ Save Changes</button>
   </div>
 </div>
 
@@ -645,67 +739,97 @@
     wrap.innerHTML = `<div class="vt-line" style="top:${lineTop}px;height:${lineBot-lineTop}px"></div>${dotsH}${bubbH}`;
   }
 
-  // ── Drag ──
+  // ── Bubble interaction: tap / long-press / drag ──
   function startDrag(e, taskId) {
     e.preventDefault();
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const el      = document.querySelector(`.vt-bubble[data-id="${taskId}"]`);
     if (!el) return;
-    const baseTop  = parseFloat(el.dataset.baseTop);
-    const origRef  = el.dataset.ref || task.date;  // reference date (deadline || date)
-
-    dragState = { taskId, origRef, startY: clientY, el, baseTop };
-    el.classList.add('vt-dragging');
-
+    const baseTop = parseFloat(el.dataset.baseTop);
+    const origRef = el.dataset.ref || task.date;
+    const startY  = e.touches ? e.touches[0].clientY : e.clientY;
+    const startX  = e.touches ? e.touches[0].clientX : e.clientX;
     const preview = document.getElementById('drag-preview');
-    preview.style.display = 'block';
-    preview.textContent   = fmtFull(origRef);
 
-    function onMove(e) {
-      if (!dragState) return;
-      e.preventDefault();
-      const cy  = e.touches ? e.touches[0].clientY : e.clientY;
-      const dy  = cy - dragState.startY;
-      dragState.el.style.top = (dragState.baseTop + dy) + 'px';
+    let phase = 'pending'; // 'pending' | 'drag' | 'longpress'
 
-      const delta = Math.round(dy / PDAY);
-      let   prev  = addDays(dragState.origRef, delta);
-      if (prev < todayStr()) prev = todayStr();
-      preview.textContent = fmtFull(prev);
-    }
+    const lpTimer = setTimeout(() => {
+      if (phase !== 'pending') return;
+      phase = 'longpress';
+      if (navigator.vibrate) navigator.vibrate(45);
+      el.classList.add('lp-active');
+      setTimeout(() => el.classList.remove('lp-active'), 250);
+      cleanup();
+      showActSheet(taskId);
+    }, 480);
 
-    async function onEnd(e) {
-      if (!dragState) return;
-      const cy    = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
-      const dy    = cy - dragState.startY;
-      const delta = Math.round(dy / PDAY);
-      let newRef  = addDays(dragState.origRef, delta);
-      if (newRef < todayStr()) newRef = todayStr();
+    function onMove(ev) {
+      ev.preventDefault();
+      const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
 
-      preview.style.display = 'none';
-      dragState.el.classList.remove('vt-dragging');
-
-      if (newRef !== dragState.origRef) {
-        const t = tasks.find(x => x.id === dragState.taskId);
-        if (t) {
-          if (t.deadline) {
-            // shift both deadline and task date by same delta
-            t.deadline = newRef;
-            t.date = addDays(t.date, delta);
-            if (t.date < todayStr()) t.date = todayStr();
-          } else {
-            t.date = newRef;
-          }
-          sortTasks(); await pushTasks();
+      if (phase === 'pending') {
+        if (Math.abs(cx - startX) > 7 || Math.abs(cy - startY) > 7) {
+          clearTimeout(lpTimer);
+          phase = 'drag';
+          dragState = { taskId, origRef, startY, el, baseTop };
+          el.classList.add('vt-dragging');
+          preview.style.display = 'block';
+          preview.textContent = fmtFull(origRef);
         }
+        return;
       }
 
-      dragState = null;
+      if (phase === 'drag') {
+        const dy    = cy - dragState.startY;
+        dragState.el.style.top = (dragState.baseTop + dy) + 'px';
+        const delta = Math.round(dy / PDAY);
+        let   prev  = addDays(dragState.origRef, delta);
+        if (prev < todayStr()) prev = todayStr();
+        preview.textContent = fmtFull(prev);
+      }
+    }
+
+    async function onEnd(ev) {
+      clearTimeout(lpTimer);
+
+      if (phase === 'pending') {
+        // Quick tap → open day sheet
+        cleanup();
+        openSheet(task.date);
+        return;
+      }
+
+      if (phase === 'drag' && dragState) {
+        const cy    = ev.changedTouches ? ev.changedTouches[0].clientY : ev.clientY;
+        const dy    = cy - dragState.startY;
+        const delta = Math.round(dy / PDAY);
+        let newRef  = addDays(dragState.origRef, delta);
+        if (newRef < todayStr()) newRef = todayStr();
+
+        preview.style.display = 'none';
+        dragState.el.classList.remove('vt-dragging');
+
+        if (newRef !== dragState.origRef) {
+          const t = tasks.find(x => x.id === dragState.taskId);
+          if (t) {
+            if (t.deadline) {
+              t.deadline = newRef;
+              t.date     = addDays(t.date, delta);
+              if (t.date < todayStr()) t.date = todayStr();
+            } else {
+              t.date = newRef;
+            }
+            sortTasks(); await pushTasks();
+          }
+        }
+        dragState = null;
+        render();
+      }
+
       cleanup();
-      render();
     }
 
     function cleanup() {
@@ -719,6 +843,94 @@
     document.addEventListener('mouseup',   onEnd);
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend',  onEnd);
+  }
+
+  // ── Action sheet ──
+  let actTaskId = null;
+
+  function showActSheet(taskId) {
+    actTaskId = taskId;
+    const task = tasks.find(t => t.id === taskId);
+    document.getElementById('act-task-title').textContent = task ? task.title : '';
+    document.getElementById('act-overlay').classList.add('open');
+    document.getElementById('act-sheet').classList.add('open');
+  }
+
+  function closeActSheet() {
+    actTaskId = null;
+    document.getElementById('act-overlay').classList.remove('open');
+    document.getElementById('act-sheet').classList.remove('open');
+  }
+
+  function editFromAct() {
+    const id = actTaskId;
+    closeActSheet();
+    openEditSheet(id);
+  }
+
+  async function deleteFromAct() {
+    const id = actTaskId;
+    closeActSheet();
+    if (!confirm('Delete this reminder?')) return;
+    tasks = tasks.filter(x => x.id !== id);
+    await pushTasks();
+    render();
+  }
+
+  // ── Edit sheet ──
+  let editingId = null;
+  let editCat   = 'personal';
+
+  function openEditSheet(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    editingId = taskId;
+    editCat   = task.category || 'other';
+
+    document.getElementById('e-title').value    = task.title;
+    document.getElementById('e-date').value     = task.date;
+    document.getElementById('e-time').value     = task.time || '';
+    document.getElementById('e-deadline').value = task.deadline || '';
+    renderEditCats();
+
+    document.getElementById('edit-overlay').classList.add('open');
+    document.getElementById('edit-sheet').classList.add('open');
+    setTimeout(() => document.getElementById('e-title').focus(), 320);
+  }
+
+  function closeEditSheet() {
+    editingId = null;
+    document.getElementById('edit-overlay').classList.remove('open');
+    document.getElementById('edit-sheet').classList.remove('open');
+  }
+
+  function renderEditCats() {
+    document.getElementById('edit-cat-row').innerHTML = Object.entries(CATS).map(([key, cat]) =>
+      `<button class="cat-pill${editCat === key ? ' picked' : ''}"
+        style="background:${cat.color}33;color:${cat.color};border-color:${editCat===key?cat.color:'transparent'}"
+        onclick="editCat='${key}';renderEditCats()">${cat.label}</button>`
+    ).join('');
+  }
+
+  async function saveEdit() {
+    const title    = document.getElementById('e-title').value.trim();
+    const date     = document.getElementById('e-date').value;
+    const time     = document.getElementById('e-time').value;
+    const deadline = document.getElementById('e-deadline').value;
+    if (!title || !date) { alert('Title and date are required'); return; }
+
+    const task = tasks.find(t => t.id === editingId);
+    if (!task) return;
+    task.title    = title;
+    task.date     = date;
+    task.time     = time;
+    task.deadline = deadline || undefined;
+    task.category = editCat;
+
+    sortTasks();
+    await pushTasks();
+    closeEditSheet();
+    render();
   }
 
   // ══════════════════════════════════════════

@@ -446,7 +446,10 @@
     <div class="form-row">
       <input class="form-input" id="f-title" placeholder="Add a reminder…"
              onkeydown="if(event.key==='Enter')saveTask()" />
-      <input class="form-input" id="f-time" type="time" />
+    </div>
+    <div class="form-row">
+      <input class="form-input" id="f-date" type="date" style="flex:1" />
+      <input class="form-input" id="f-time" type="time" style="width:96px;flex-shrink:0" />
     </div>
     <div class="form-row">
       <div class="cat-row" id="cat-picker"></div>
@@ -587,9 +590,10 @@
   // ── CRUD ──
   async function saveTask() {
     const title = document.getElementById('f-title').value.trim();
-    if (!title || !sheetDate) return;
+    const date  = document.getElementById('f-date').value || sheetDate;
+    if (!title || !date) return;
     const time = document.getElementById('f-time').value;
-    tasks.push({ id: 't' + Date.now(), date: sheetDate, title, time: time || '', done: false, category: pickedCat });
+    tasks.push({ id: 't' + Date.now(), date, title, time: time || '', done: false, category: pickedCat });
     sortTasks();
     document.getElementById('f-title').value = '';
     document.getElementById('f-time').value = '';
@@ -1054,6 +1058,7 @@
     sheetDate = dateStr;
     document.getElementById('sheet-date-label').textContent = fmtFull(dateStr);
     document.getElementById('f-title').value = '';
+    document.getElementById('f-date').value  = dateStr;
     document.getElementById('f-time').value  = '';
     renderCatPicker();
     renderSheet(dateStr);

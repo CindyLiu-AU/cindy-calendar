@@ -306,10 +306,14 @@
     .form-input:focus { border-color: var(--amber); }
     #f-title { flex: 1; }
     #f-time  { width: 96px; flex-shrink: 0; }
-    .color-row { display: flex; gap: 7px; align-items: center; flex: 1; }
-    .cswatch { width: 26px; height: 26px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform .12s; }
-    .cswatch.picked { border-color: white; transform: scale(1.2); }
-    html[data-theme="light"] .cswatch.picked { border-color: #1a1000; }
+    .cat-row { display: flex; gap: 5px; align-items: center; flex: 1; flex-wrap: wrap; }
+    .cat-pill {
+      padding: 5px 10px; border-radius: 20px; border: 2px solid transparent;
+      font-size: 11px; font-weight: 800; cursor: pointer; font-family: inherit;
+      transition: transform .12s, opacity .12s; opacity: .55;
+    }
+    .cat-pill.picked { border-color: white; opacity: 1; transform: scale(1.05); }
+    html[data-theme="light"] .cat-pill.picked { border-color: #1a1000; }
     .form-save-btn {
       padding: 9px 18px; border-radius: 10px; border: none;
       background: var(--amber); color: #1a1000; font-size: 14px;
@@ -371,7 +375,7 @@
       <input class="form-input" id="f-time" type="time" />
     </div>
     <div class="form-row">
-      <div class="color-row" id="color-swatches"></div>
+      <div class="cat-row" id="cat-picker"></div>
       <button class="form-save-btn" onclick="saveTask()">＋ Add</button>
     </div>
   </div>
@@ -383,20 +387,24 @@
   const FB  = 'https://parents-reminder-places-default-rtdb.asia-southeast1.firebasedatabase.app/cindy-calendar.json';
   const THEME_KEY = 'cc_theme';
 
-  const COLORS = {
-    blue:   '#3b82f6',
-    amber:  '#f59e0b',
-    green:  '#22c55e',
-    red:    '#ef4444',
-    purple: '#a855f7',
+  const CATS = {
+    tts:     { label: 'TTS',       color: '#f59e0b' },
+    personal:{ label: 'Personal',  color: '#3b82f6' },
+    dadmum:  { label: 'Dad & Mum', color: '#22c55e' },
+    josh:    { label: 'Josh',      color: '#a855f7' },
+    other:   { label: 'Other',     color: '#64748b' },
   };
+
+  function catColor(t) {
+    return (CATS[t.category] || CATS[t.color] || CATS.other).color;
+  }
 
   let tasks       = [];
   let activeTab   = 'visual';
   let calYear     = new Date().getFullYear();
   let calMonth    = new Date().getMonth();
   let sheetDate   = null;
-  let pickedColor = 'blue';
+  let pickedCat   = 'personal';
 
   // ── Theme ──
   function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); localStorage.setItem(THEME_KEY, t); }
@@ -462,7 +470,7 @@
     const title = document.getElementById('f-title').value.trim();
     if (!title || !sheetDate) return;
     const time = document.getElementById('f-time').value;
-    tasks.push({ id: 't' + Date.now(), date: sheetDate, title, time: time || '', done: false, color: pickedColor });
+    tasks.push({ id: 't' + Date.now(), date: sheetDate, title, time: time || '', done: false, category: pickedCat });
     sortTasks();
     document.getElementById('f-title').value = '';
     document.getElementById('f-time').value = '';
@@ -501,12 +509,21 @@
   }
 
   // ── Task card for list view ──
+  function fmtShort(dateStr) {
+    return new Date(dateStr + 'T00:00:00')
+      .toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   function taskCardHTML(t) {
-    const col = COLORS[t.color] || COLORS.blue;
+    const col     = catColor(t);
+    const catInfo = CATS[t.category] || CATS.other;
     return `<div class="task-card${t.done ? ' done-card' : ''}">
       <div class="task-color-bar" style="background:${col}"></div>
       <div class="task-info">
-        <div class="task-time-lbl">${t.time || 'All day'}</div>
+        <div class="task-time-lbl">
+          ${fmtShort(t.date)}${t.time ? ' · ' + t.time : ''}
+          <span style="margin-left:5px;background:${col}22;color:${col};border-radius:8px;padding:1px 6px;font-size:10px;font-weight:800">${catInfo.label}</span>
+        </div>
         <div class="task-title-txt${t.done ? ' done-txt' : ''}">${escHtml(t.title)}</div>
         ${cdBadge(t)}
       </div>
@@ -578,8 +595,10 @@
         // Stack tasks on same date with PDAY/2 gap
         const taskY = baseY + i * Math.round(PDAY * 0.55);
 
-        const col   = COLORS[t.color] || COLORS.blue;
-        const badge = cdBadge(t, 'vt-badge');
+        const col     = catColor(t);
+        const catInfo = CATS[t.category] || CATS.other;
+        const badge   = cdBadge(t, 'vt-badge');
+        const dueDate = fmtShort(t.date);
 
         bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}"
             data-id="${t.id}" data-date="${t.date}" data-base-top="${taskY}"
@@ -589,6 +608,10 @@
           <div class="vt-bar" style="background:${col}"></div>
           <div class="vt-body">
             <div class="vt-title">${escHtml(t.title)}</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+              <span style="font-size:10px;font-weight:700;color:var(--muted)">${dueDate}</span>
+              <span style="background:${col}22;color:${col};border-radius:8px;padding:1px 6px;font-size:10px;font-weight:800">${catInfo.label}</span>
+            </div>
             ${badge}
           </div>
           <div class="vt-grip">⋮⋮</div>
@@ -735,7 +758,7 @@
         const ds = `${mk}-${String(d).padStart(2, '0')}`;
         const isT = ds === today, isP = ds < today;
         const dots = (byDate[ds] || []).slice(0, 4)
-          .map(t => `<div class="cal-dot" style="background:${COLORS[t.color]||COLORS.blue}"></div>`).join('');
+          .map(t => `<div class="cal-dot" style="background:${catColor(t)}"></div>`).join('');
         return `<div class="cal-cell${isT ? ' is-today' : isP ? ' is-past' : ''}" onclick="openSheet('${ds}')">
           <span class="cal-dn">${d}</span>
           <div class="cal-dots">${dots}</div>
@@ -777,7 +800,7 @@
     document.getElementById('sheet-date-label').textContent = fmtFull(dateStr);
     document.getElementById('f-title').value = '';
     document.getElementById('f-time').value  = '';
-    renderColorSwatches();
+    renderCatPicker();
     renderSheet(dateStr);
     document.getElementById('overlay').classList.add('open');
     document.getElementById('day-sheet').classList.add('open');
@@ -798,14 +821,15 @@
       : '<div class="sheet-no-tasks">No reminders — add one below</div>';
   }
 
-  function renderColorSwatches() {
-    document.getElementById('color-swatches').innerHTML = Object.entries(COLORS).map(([name, hex]) =>
-      `<div class="cswatch${pickedColor === name ? ' picked' : ''}"
-        style="background:${hex}" onclick="pickColor('${name}')"></div>`
+  function renderCatPicker() {
+    document.getElementById('cat-picker').innerHTML = Object.entries(CATS).map(([key, cat]) =>
+      `<button class="cat-pill${pickedCat === key ? ' picked' : ''}"
+        style="background:${cat.color}33;color:${cat.color};border-color:${pickedCat===key?cat.color:'transparent'}"
+        onclick="pickCat('${key}')">${cat.label}</button>`
     ).join('');
   }
 
-  function pickColor(name) { pickedColor = name; renderColorSwatches(); }
+  function pickCat(key) { pickedCat = key; renderCatPicker(); }
 
   // ── Init ──
   showTab('visual');

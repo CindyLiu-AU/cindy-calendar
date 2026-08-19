@@ -128,6 +128,17 @@
     }
     .task-del-btn:active { color: var(--red); }
 
+    /* ── Countdown badge ── */
+    .countdown-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 800; border-radius: 20px;
+      padding: 2px 8px; margin-top: 4px; width: fit-content;
+    }
+    .countdown-badge.urgent  { background: rgba(239,68,68,0.15);  color: var(--red);   border: 1px solid rgba(239,68,68,0.3); }
+    .countdown-badge.warning { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+    .countdown-badge.ok      { background: rgba(59,130,246,0.12); color: var(--blue);  border: 1px solid rgba(59,130,246,0.25); }
+    .countdown-badge.done    { background: rgba(34,197,94,0.12);  color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+
     .tl-empty {
       text-align: center; color: var(--muted);
       padding: 60px 20px; font-size: 15px; line-height: 1.8;
@@ -406,6 +417,20 @@
   }
 
   // ── Task card HTML ──
+  function countdownBadge(t) {
+    if (!t.deadline) return '';
+    const dl = new Date(t.deadline + 'T00:00:00');
+    const now = new Date(todayStr() + 'T00:00:00');
+    const days = Math.ceil((dl - now) / 86400000);
+    if (t.done) return `<div class="countdown-badge done">✓ Done — deadline was ${t.deadline}</div>`;
+    if (days < 0)  return `<div class="countdown-badge urgent">⚠ Overdue by ${Math.abs(days)} day${Math.abs(days)>1?'s':''}</div>`;
+    if (days === 0) return `<div class="countdown-badge urgent">⚠ Due TODAY</div>`;
+    if (days === 1) return `<div class="countdown-badge urgent">⚠ Due TOMORROW</div>`;
+    if (days <= 7)  return `<div class="countdown-badge urgent">🔴 ${days} days left — ${t.deadline}</div>`;
+    if (days <= 14) return `<div class="countdown-badge warning">🟡 ${days} days left — ${t.deadline}</div>`;
+    return `<div class="countdown-badge ok">🔵 ${days} days left — ${t.deadline}</div>`;
+  }
+
   function taskCardHTML(t) {
     const col = COLORS[t.color] || COLORS.blue;
     const timeLbl = t.time || 'All day';
@@ -414,6 +439,7 @@
       <div class="task-info">
         <div class="task-time-lbl">${timeLbl}</div>
         <div class="task-title-txt${t.done ? ' done-txt' : ''}">${escHtml(t.title)}</div>
+        ${countdownBadge(t)}
       </div>
       <button class="task-done-btn${t.done ? ' is-done' : ''}" onclick="toggleDone('${t.id}')">${t.done ? '✓' : ''}</button>
       <button class="task-del-btn" onclick="deleteTask('${t.id}')">×</button>

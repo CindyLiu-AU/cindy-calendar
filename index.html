@@ -144,10 +144,13 @@
     }
     .vt-bubble:active { cursor: grabbing; }
     .vt-bubble.pinned {
-      border-color: var(--amber) !important;
+      border: 3px solid var(--amber) !important;
+      background: rgba(245,158,11,0.10);
       cursor: default;
+      box-shadow: 0 0 0 1px rgba(245,158,11,0.2);
     }
-    .vt-bubble.pinned::after { background: var(--amber); opacity: .4; }
+    html[data-theme="light"] .vt-bubble.pinned { background: rgba(245,158,11,0.08); }
+    .vt-bubble.pinned::after { background: var(--amber); opacity: .5; }
     .vt-bubble.vt-dragging {
       box-shadow: 0 10px 40px rgba(0,0,0,.5);
       border-color: var(--blue);

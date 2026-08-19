@@ -143,6 +143,11 @@
       transition: box-shadow .15s, border-color .15s;
     }
     .vt-bubble:active { cursor: grabbing; }
+    .vt-bubble.pinned {
+      border-color: var(--amber) !important;
+      cursor: default;
+    }
+    .vt-bubble.pinned::after { background: var(--amber); opacity: .4; }
     .vt-bubble.vt-dragging {
       box-shadow: 0 10px 40px rgba(0,0,0,.5);
       border-color: var(--blue);
@@ -456,6 +461,7 @@
   <div class="sheet-handle"></div>
   <div class="act-title" id="act-task-title"></div>
   <button class="act-btn" onclick="editFromAct()">✏️ Edit</button>
+  <button class="act-btn" id="act-pin-btn" onclick="togglePinFromAct()">📌 Pin</button>
   <button class="act-btn danger" onclick="deleteFromAct()">🗑 Delete</button>
   <button class="act-btn act-cancel" onclick="closeActSheet()">✕ Cancel</button>
 </div>
@@ -716,7 +722,8 @@
       const dispDate  = fmtShort(refDate(t));
       const hasDeadline = !!t.deadline;
 
-      bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}"
+      const isPinned = !!t.pinned;
+      bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}${isPinned ? ' pinned' : ''}"
           data-id="${t.id}" data-ref="${refDate(t)}" data-base-top="${y}"
           style="top:${y}px"
           onmousedown="startDrag(event,'${t.id}')"
@@ -730,7 +737,7 @@
           </div>
           ${badge}
         </div>
-        <div class="vt-grip">⋮⋮</div>
+        <div class="vt-grip" style="color:${isPinned ? 'var(--amber)' : 'var(--dim)'}">${isPinned ? '📌' : '⋮⋮'}</div>
       </div>`;
     });
 
@@ -772,6 +779,7 @@
 
       if (phase === 'pending') {
         if (Math.abs(cx - startX) > 7 || Math.abs(cy - startY) > 7) {
+          if (task.pinned) return; // pinned — no drag
           clearTimeout(lpTimer);
           phase = 'drag';
           dragState = { taskId, origRef, startY, el, baseTop };
@@ -852,8 +860,15 @@
     actTaskId = taskId;
     const task = tasks.find(t => t.id === taskId);
     document.getElementById('act-task-title').textContent = task ? task.title : '';
+    document.getElementById('act-pin-btn').textContent = task?.pinned ? '📌 Unpin' : '📌 Pin';
     document.getElementById('act-overlay').classList.add('open');
     document.getElementById('act-sheet').classList.add('open');
+  }
+
+  async function togglePinFromAct() {
+    const task = tasks.find(t => t.id === actTaskId);
+    if (task) { task.pinned = !task.pinned; await pushTasks(); render(); }
+    closeActSheet();
   }
 
   function closeActSheet() {

@@ -50,13 +50,33 @@
     }
     .hbtn:active { opacity: .7; }
 
-    .tabs { display: flex; gap: 5px; margin-top: 10px; padding-bottom: 10px; }
+    .tabs { display: flex; gap: 5px; margin-top: 10px; padding-bottom: 8px; }
     .tab {
       flex: 1; padding: 7px 0; border-radius: 10px; border: 2px solid var(--border);
       background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 700;
       font-family: inherit; cursor: pointer; text-align: center;
     }
     .tab.active { background: var(--amber); border-color: var(--amber); color: #1a1000; }
+
+    /* ── Category filter bar ── */
+    #filter-bar {
+      display: flex; gap: 5px; padding: 6px 14px 10px;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    #filter-bar::-webkit-scrollbar { display: none; }
+    .fp {
+      padding: 4px 11px; border-radius: 20px; border: 2px solid transparent;
+      font-size: 11px; font-weight: 800; cursor: pointer; white-space: nowrap;
+      font-family: inherit; flex-shrink: 0; transition: opacity .15s;
+    }
+    .fp.off { opacity: .28; text-decoration: line-through; }
+    .fp-all {
+      padding: 4px 11px; border-radius: 20px;
+      border: 2px solid var(--border); background: var(--surface);
+      color: var(--muted); font-size: 11px; font-weight: 800;
+      cursor: pointer; white-space: nowrap; font-family: inherit; flex-shrink: 0;
+    }
+    .fp-all.active { border-color: var(--amber); color: var(--amber); }
 
     /* ══════════════════════════════════════════
        VISUAL TIMELINE
@@ -345,6 +365,7 @@
     <button class="tab" id="tab-lst" onclick="showTab('list')">📋 List</button>
     <button class="tab" id="tab-cal" onclick="showTab('calendar')">📅 Calendar</button>
   </div>
+  <div id="filter-bar"></div>
 </div>
 
 <!-- Visual timeline -->
@@ -400,6 +421,7 @@
   }
 
   let tasks       = [];
+  let hiddenCats  = new Set();
   let activeTab   = 'visual';
   let calYear     = new Date().getFullYear();
   let calMonth    = new Date().getMonth();
@@ -546,10 +568,10 @@
     const today = todayStr();
 
     // Only show incomplete tasks (overdue included) and done tasks from today only
-    const visible = tasks.filter(t =>
+    const visible = visibleTasks(tasks.filter(t =>
       (!t.done && t.date >= addDays(today, -3)) ||
       (t.done && t.date === today)
-    );
+    ));
 
     if (!visible.length) {
       wrap.style.height = '';
@@ -703,7 +725,7 @@
     const ahead  = addDays(today, 90);
 
     const grouped = {};
-    tasks.forEach(t => {
+    visibleTasks(tasks).forEach(t => {
       if (t.date < cutoff || t.date > ahead) return;
       if (t.date < today && t.done) return;
       (grouped[t.date] = grouped[t.date] || []).push(t);
@@ -747,7 +769,7 @@
     const mk       = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
 
     const byDate = {};
-    tasks.filter(t => t.date.startsWith(mk)).forEach(t => {
+    visibleTasks(tasks.filter(t => t.date.startsWith(mk))).forEach(t => {
       (byDate[t.date] = byDate[t.date] || []).push(t);
     });
 
@@ -821,6 +843,37 @@
       : '<div class="sheet-no-tasks">No reminders — add one below</div>';
   }
 
+  // ── Category filter bar ──
+  function renderFilters() {
+    const allHidden = hiddenCats.size === 0;
+    document.getElementById('filter-bar').innerHTML =
+      `<button class="fp-all${allHidden ? ' active' : ''}" onclick="showAllCats()">All</button>` +
+      Object.entries(CATS).map(([key, cat]) => {
+        const off = hiddenCats.has(key) ? ' off' : '';
+        return `<button class="fp${off}"
+          style="background:${cat.color}22;color:${cat.color};border-color:${off?'transparent':cat.color}"
+          onclick="toggleFilter('${key}')">${cat.label}</button>`;
+      }).join('');
+  }
+
+  function toggleFilter(key) {
+    if (hiddenCats.has(key)) hiddenCats.delete(key);
+    else hiddenCats.add(key);
+    renderFilters();
+    render();
+  }
+
+  function showAllCats() {
+    hiddenCats.clear();
+    renderFilters();
+    render();
+  }
+
+  function visibleTasks(arr) {
+    return hiddenCats.size === 0 ? arr
+      : arr.filter(t => !hiddenCats.has(t.category || 'other'));
+  }
+
   function renderCatPicker() {
     document.getElementById('cat-picker').innerHTML = Object.entries(CATS).map(([key, cat]) =>
       `<button class="cat-pill${pickedCat === key ? ' picked' : ''}"
@@ -832,6 +885,7 @@
   function pickCat(key) { pickedCat = key; renderCatPicker(); }
 
   // ── Init ──
+  renderFilters();
   showTab('visual');
   loadTasks();
 </script>

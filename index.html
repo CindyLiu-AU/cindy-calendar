@@ -92,16 +92,13 @@
       /* height set by JS */
     }
 
-    /* centre vertical line */
+    /* centre vertical line — top/height set by JS so it only spans actual tasks */
     .vt-line {
       position: absolute;
-      left: 50%; top: 0; bottom: 0;
+      left: 50%;
       width: 3px;
-      background: linear-gradient(to bottom,
-        transparent 0px,
-        var(--dim) 40px,
-        var(--dim) calc(100% - 50px),
-        transparent 100%);
+      background: var(--dim);
+      border-radius: 2px;
       transform: translateX(-50%);
     }
 
@@ -583,74 +580,69 @@
       return;
     }
 
-    // Sort ASC by days left (fewest first = top of timeline)
+    // Sort ASC by days left (fewest first = top)
     visible.sort((a, b) => daysLeft(a) - daysLeft(b) || a.date.localeCompare(b.date));
 
-    // Date range — use reference date (deadline || date) for positioning
-    const refs    = visible.map(t => refDate(t)).sort();
-    const minDate = new Date(refs[0] + 'T00:00:00');
-    const maxDate = new Date(refs[refs.length - 1] + 'T00:00:00');
+    // ── Even spacing — no empty stretches ──
+    const ITEM_GAP  = 110; // px between each task
+    const DOT_Y_OFF = 22;  // dot sits ~midway down the bubble
 
-    function yOf(dateStr) {
-      const d = new Date(dateStr + 'T00:00:00');
-      return PAD_TOP + Math.round((d - minDate) / 86400000) * PDAY;
-    }
+    // Assign a Y position to every task sequentially
+    const taskY = {};
+    visible.forEach((t, i) => { taskY[t.id] = PAD_TOP + i * ITEM_GAP; });
 
-    // Group by reference date
-    const byRef = {};
-    visible.forEach(t => { const r = refDate(t); (byRef[r] = byRef[r] || []).push(t); });
-    const refDates = Object.keys(byRef).sort();
+    const lineTop    = PAD_TOP + DOT_Y_OFF;
+    const lineBot    = PAD_TOP + (visible.length - 1) * ITEM_GAP + DOT_Y_OFF;
+    const containerH = lineBot + PAD_BOT;
 
-    // Build HTML
+    // Date markers — one dot per unique reference date (at the first task of that date)
+    const seenRef = new Set();
     let dotsH = '';
-    let bubbH = '';
-    let sideN = 0;
-
-    for (const rd of refDates) {
-      const baseY   = yOf(rd);
+    visible.forEach(t => {
+      const rd = refDate(t);
+      if (seenRef.has(rd)) return;
+      seenRef.add(rd);
+      const y = taskY[t.id] + DOT_Y_OFF;
       const { text, cls } = dayLabel(rd);
       const isToday = rd === today;
+      dotsH += `<div class="vt-dot${isToday ? ' is-today' : ''}" style="top:${y}px"></div>
+                <div class="vt-lbl ${cls}" style="top:${y - 20}px">${text}</div>`;
+    });
 
-      dotsH += `<div class="vt-dot${isToday ? ' is-today' : ''}" style="top:${baseY}px"></div>
-                <div class="vt-lbl ${cls}" style="top:${baseY - 20}px">${text}</div>`;
+    // Bubbles
+    let bubbH = '';
+    let sideN = 0;
+    visible.forEach(t => {
+      const side      = sideN % 2 === 0 ? 'right' : 'left';
+      sideN++;
+      const y         = taskY[t.id];
+      const col       = catColor(t);
+      const catInfo   = CATS[t.category] || CATS.other;
+      const badge     = cdBadge(t, 'vt-badge');
+      const dispDate  = fmtShort(refDate(t));
+      const hasDeadline = !!t.deadline;
 
-      byRef[rd].forEach((t, i) => {
-        const side    = sideN % 2 === 0 ? 'right' : 'left';
-        sideN++;
-        const taskY   = baseY + i * Math.round(PDAY * 0.58);
-        const col     = catColor(t);
-        const catInfo = CATS[t.category] || CATS.other;
-        const badge   = cdBadge(t, 'vt-badge');
-        // Show the reference date (deadline if set, else task date)
-        const dispDate = fmtShort(refDate(t));
-        const hasDeadline = !!t.deadline;
-
-        bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}"
-            data-id="${t.id}" data-ref="${refDate(t)}" data-base-top="${taskY}"
-            style="top:${taskY}px"
-            onmousedown="startDrag(event,'${t.id}')"
-            ontouchstart="startDrag(event,'${t.id}')">
-          <div class="vt-bar" style="background:${col}"></div>
-          <div class="vt-body">
-            <div class="vt-title">${escHtml(t.title)}</div>
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-              <span style="font-size:10px;font-weight:700;color:var(--muted)">${hasDeadline ? '⏰ ' : ''}${dispDate}</span>
-              <span style="background:${col}22;color:${col};border-radius:8px;padding:1px 6px;font-size:10px;font-weight:800">${catInfo.label}</span>
-            </div>
-            ${badge}
+      bubbH += `<div class="vt-bubble ${side}${t.done ? ' done-card' : ''}"
+          data-id="${t.id}" data-ref="${refDate(t)}" data-base-top="${y}"
+          style="top:${y}px"
+          onmousedown="startDrag(event,'${t.id}')"
+          ontouchstart="startDrag(event,'${t.id}')">
+        <div class="vt-bar" style="background:${col}"></div>
+        <div class="vt-body">
+          <div class="vt-title">${escHtml(t.title)}</div>
+          <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:10px;font-weight:700;color:var(--muted)">${hasDeadline ? '⏰ ' : ''}${dispDate}</span>
+            <span style="background:${col}22;color:${col};border-radius:8px;padding:1px 6px;font-size:10px;font-weight:800">${catInfo.label}</span>
           </div>
-          <div class="vt-grip">⋮⋮</div>
-        </div>`;
-      });
-    }
-
-    // Container height
-    const totalDays = Math.round((maxDate - minDate) / 86400000);
-    const containerH = PAD_TOP + totalDays * PDAY + PAD_BOT +
-      Math.max(...Object.values(byRef).map(arr => (arr.length - 1) * Math.round(PDAY * 0.58)), 0);
+          ${badge}
+        </div>
+        <div class="vt-grip">⋮⋮</div>
+      </div>`;
+    });
 
     wrap.style.height = containerH + 'px';
-    wrap.innerHTML = `<div class="vt-line"></div>${dotsH}${bubbH}`;
+    // Line only spans from first to last bubble — no empty stretches
+    wrap.innerHTML = `<div class="vt-line" style="top:${lineTop}px;height:${lineBot-lineTop}px"></div>${dotsH}${bubbH}`;
   }
 
   // ── Drag ──
